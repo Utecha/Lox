@@ -1,0 +1,20 @@
+fun add(a, b) {
+    return a + b;
+}
+
+fun subtract(a, b) {
+    return a - b;
+}
+
+fun multiply(a, b) {
+    return a * b;
+}
+
+fun divide(a, b) {
+    return a / b;
+}
+
+print add(34, 35);
+print subtract(500, 80);
+print multiply(69, 420);
+print divide(420, 69);

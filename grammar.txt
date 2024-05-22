@@ -1,0 +1,65 @@
+/* Program */
+program     -> declaration* EOF ;
+
+
+/* Declarations */
+declaration -> classDecl
+            | funDecl
+            | varDecl
+            | statement ;
+classDecl   -> "class" IDENTIFIER ( "<" IDENTIFIER )?
+               "{" function* "}" ;
+funDecl     -> "fun" function ;
+varDecl     -> "var" IDENTIFIER ( "=" expression )? ";" ;
+
+
+/* Statements */
+statement   -> exprStmt
+            | forStmt
+            | ifStmt
+            | printStmt
+            | returnStmt
+            | whileStmt
+            | block ;
+exprStmt    -> expression ";" ;
+forStmt     -> "for" "(" ( varDecl | exprStmt | ";" )
+                           expression? ";"
+                           expression? ")"
+                           statement ;
+ifStmt      -> "if" "(" expression ")" statement
+                ( "else" statement )? ;
+printStmt   -> "print" expression ";" ;
+returnStmt  -> "return" expression? ";" ;
+whileStmt   -> "while" "(" expression ")" statement ;
+block       -> "{" declaration* "}" ;
+
+
+/* Expressions */
+expression  -> assignment ;
+assignment  -> ( call "." )? IDENTIFIER "=" assignment
+            | logical_or ;
+logical_or  -> logical_and ( "or" logical_and )* ;
+logical_and -> equality ( "and" equality )* ;
+equality    -> comparison ( ( "!=" | "==" ) comparison )* ;
+comparison  -> term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+term        -> factor ( ( "-" | "+" ) factor )* ;
+factor      -> unary ( ( "/" | "*" ) unary )* ;
+unary       -> ( "!" | "-" ) unary | call ;
+call        -> primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
+primary     -> "true" | "false" | "nil" | "this"
+            | NUMBER | STRING | IDENTIFIER | "(" expression ")"
+            | "super" "." IDENTIFIER ;
+
+
+/* Utility Rules */
+function    -> IDENTIFIER "(" parameters? ")" block ;
+parameters  -> IDENTIFIER ( "," IDENTIFIER )* ;
+arguments   -> expression ( "," expression )* ;
+
+
+/* Lexical Grammar */
+NUMBER      -> DIGIT+ ( "." DIGIT+ )? ;
+STRING      -> '"' <ANY CHAR EXCEPT '"'>* '"' ;
+IDENTIFIER  -> ALPHA ( ALPHA | DIGIT )* ;
+ALPHA       -> "a" ... "z" | "A" ... "Z" | "_" ;
+DIGIT       -> "0" ... "9" ;
