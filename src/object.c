@@ -16,8 +16,13 @@ allocateObject(size_t size, ObjType type)
     Obj *object = (Obj *)reallocate(NULL, 0, size);
 
     object->type = type;
+    object->isMarked = false;
     object->next = vm.objects;
     vm.objects = object;
+
+#ifdef DEBUG_LOG_GC
+    printf("%p : Allocate %zu : for %d\n", (void *)object, size, type);
+#endif // DEBUG_LOG_GC
 
     return object;
 }
@@ -30,7 +35,10 @@ allocateString(char *chars, int length, uint32_t hash)
     string->length = length;
     string->chars = chars;
     string->hash = hash;
+
+    push(OBJ_VAL(string));
     tableSet(&vm.strings, string, NIL_VAL);
+    pop();
 
     return string;
 }
@@ -46,6 +54,24 @@ hashString(const char *key, int length)
     }
 
     return hash;
+}
+
+ObjBoundMethod *
+newBoundMethod(Value receiver, ObjClosure *method)
+{
+    ObjBoundMethod *bound = ALLOCATE_OBJ(ObjBoundMethod, OBJ_BOUND_METHOD);
+    bound->receiver = receiver;
+    bound->method = method;
+    return bound;
+}
+
+ObjClass *
+newClass(ObjString *name)
+{
+    ObjClass *klass = ALLOCATE_OBJ(ObjClass, OBJ_CLASS);
+    klass->name = name;
+    initTable(&klass->methods);
+    return klass;
 }
 
 ObjClosure *
@@ -75,6 +101,15 @@ newFunction()
     initChunk(&function->chunk);
 
     return function;
+}
+
+ObjInstance *
+newInstance(ObjClass *klass)
+{
+    ObjInstance *instance = ALLOCATE_OBJ(ObjInstance, OBJ_INSTANCE);
+    instance->klass = klass;
+    initTable(&instance->fields);
+    return instance;
 }
 
 ObjNative *
@@ -139,12 +174,24 @@ void
 printObject(Value value)
 {
     switch (OBJ_TYPE(value)) {
+        case OBJ_BOUND_METHOD: {
+            printFunction(AS_BOUND_METHOD(value)->method->function);
+        } break;
+
+        case OBJ_CLASS: {
+            printf("%s", AS_CLASS(value)->name->chars);
+        } break;
+
         case OBJ_CLOSURE: {
             printFunction(AS_CLOSURE(value)->function);
         } break;
 
         case OBJ_FUNCTION: {
             printFunction(AS_FUNCTION(value));
+        } break;
+
+        case OBJ_INSTANCE: {
+            printf("Instance of: %s", AS_INSTANCE(value)->klass->name->chars);
         } break;
 
         case OBJ_NATIVE: {

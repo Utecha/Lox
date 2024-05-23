@@ -1,5 +1,6 @@
-CC = clang
-CFLAGS = -Wall -Wextra -Wno-unused-parameter -std=c99
+CC = gcc
+CFLAGS = -std=c99 -Wall -Wextra -Wno-unused-parameter
+LINK = -pg
 
 DBG = -O0 -DDEBUG -ggdb
 DBGFLAGS := $(CFLAGS) $(DBG)
@@ -49,7 +50,7 @@ clean:
 	printf "Cleaned %s successfully.\n" $(TARG)
 
 $(DBGTARG): $(OBJ) | $(DBGDIR)
-	$(CC) $(DBGFLAGS) $^ -o $@
+	$(CC) $(DBGFLAGS) $^ -o $@ $(LINK)
 
 $(RELTARG): $(OBJ) | $(RELDIR)
 	$(CC) $(RELFLAGS) $^ -o $@

@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "compiler.h"
+#include "memory.h"
 #include "scanner.h"
 
 #ifdef DEBUG_PRINT_CODE
@@ -12,6 +13,7 @@
 
 Parser parser;
 Compiler *current = NULL;
+ClassCompiler *currentClass = NULL;
 
 static Chunk *
 currentChunk()
@@ -126,7 +128,12 @@ emitJump(uint8_t instruction)
 static void
 emitReturn()
 {
-    emitByte(OP_NIL);
+    if (current->type == TYPE_INITIALIZER) {
+        emitBytes(OP_GET_LOCAL, 0);
+    } else {
+        emitByte(OP_NIL);
+    }
+
     emitByte(OP_RETURN);
 }
 
@@ -181,8 +188,14 @@ initCompiler(Compiler *compiler, FunctionType type)
     Local *local = &current->locals[current->localCount++];
     local->depth = 0;
     local->isCaptured = false;
-    local->name.start = "";
-    local->name.length = 0;
+
+    if (type != TYPE_FUNCTION) {
+        local->name.start = "this";
+        local->name.length = 4;
+    } else {
+        local->name.start = "";
+        local->name.length = 0;
+    }
 }
 
 static ObjFunction *
@@ -300,6 +313,24 @@ call(bool canAssign)
 }
 
 static void
+dot(bool canAssign)
+{
+    consume(IDENTIFIER_TK, "Expected property name after '.'.");
+    uint8_t name = identifierConstant(&parser.previous);
+
+    if (canAssign && match(EQ_TK)) {
+        expression();
+        emitBytes(OP_SET_PROPERTY, name);
+    } else if (match(LPAREN_TK)) {
+        uint8_t argCount = argumentList();
+        emitBytes(OP_INVOKE, name);
+        emitByte(argCount);
+    } else {
+        emitBytes(OP_GET_PROPERTY, name);
+    }
+}
+
+static void
 literal(bool canAssign)
 {
     switch (parser.previous.type) {
@@ -393,13 +424,59 @@ variable(bool canAssign)
     namedVariable(parser.previous, canAssign);
 }
 
+static Token
+syntheticToken(const char *text)
+{
+    Token token;
+    token.start = text;
+    token.length = (int)strlen(text);
+    return token;
+}
+
+static void
+super_(bool canAssign)
+{
+    if (currentClass == NULL) {
+        error("Cannot use 'super' outside of a class.");
+    } else if (!currentClass->hasSuperclass) {
+        error("Cannot use 'super' in a class with no superclass.");
+    }
+
+    consume(DOT_TK, "Expected '.' after 'super'.");
+    consume(IDENTIFIER_TK, "Expected superclass method name.");
+    uint8_t name = identifierConstant(&parser.previous);
+
+    namedVariable(syntheticToken("this"), false);
+
+    if (match(LPAREN_TK)) {
+        uint8_t argCount = argumentList();
+        namedVariable(syntheticToken("super"), false);
+        emitBytes(OP_SUPER_INVOKE, name);
+        emitByte(argCount);
+    } else {
+        namedVariable(syntheticToken("super"), false);
+        emitBytes(OP_GET_SUPER, name);
+    }
+}
+
+static void
+this_(bool canAssign)
+{
+    if (currentClass == NULL) {
+        error("Cannot use 'this' outside of a class.");
+        return;
+    }
+
+    variable(false);
+}
+
 ParseRule rules[] = {
     [LPAREN_TK]     = { grouping,   call,   PREC_CALL },
     [RPAREN_TK]     = { NULL,       NULL,   PREC_NONE },
     [LBRACE_TK]     = { NULL,       NULL,   PREC_NONE },
     [RBRACE_TK]     = { NULL,       NULL,   PREC_NONE },
     [COMMA_TK]      = { NULL,       NULL,   PREC_NONE },
-    [DOT_TK]        = { NULL,       NULL,   PREC_NONE },
+    [DOT_TK]        = { NULL,       dot,    PREC_CALL },
     [SEMICOLON_TK]  = { NULL,       NULL,   PREC_NONE },
     [MINUS_TK]      = { unary,      binary, PREC_TERM },
     [PLUS_TK]       = { NULL,       binary, PREC_TERM },
@@ -427,8 +504,8 @@ ParseRule rules[] = {
     [OR_TK]         = { NULL,       or_,    PREC_OR },
     [PRINT_TK]      = { NULL,       NULL,   PREC_NONE },
     [RETURN_TK]     = { NULL,       NULL,   PREC_NONE },
-    [SUPER_TK]      = { NULL,       NULL,   PREC_NONE },
-    [THIS_TK]       = { NULL,       NULL,   PREC_NONE },
+    [SUPER_TK]      = { super_,     NULL,   PREC_NONE },
+    [THIS_TK]       = { this_,      NULL,   PREC_NONE },
     [TRUE_TK]       = { literal,    NULL,   PREC_NONE },
     [VAR_TK]        = { NULL,       NULL,   PREC_NONE },
     [WHILE_TK]      = { NULL,       NULL,   PREC_NONE },
@@ -663,8 +740,6 @@ forStatement()
         expressionStatement();
     }
 
-    consume(SEMICOLON_TK, "Expected ';' alone or after loop init expression.");
-
     int loopStart = currentChunk()->count;
 
     int exitJump = -1;
@@ -746,6 +821,73 @@ funDeclaration()
 }
 
 static void
+method()
+{
+    consume(IDENTIFIER_TK, "Expected method name.");
+    uint8_t constant = identifierConstant(&parser.previous);
+
+    FunctionType type = TYPE_METHOD;
+    if (parser.previous.length == 4 &&
+        memcmp(parser.previous.start, "init", 4) == 0) {
+
+        type = TYPE_INITIALIZER;
+    }
+
+    function(type);
+
+    emitBytes(OP_METHOD, constant);
+}
+
+static void
+classDeclaration()
+{
+    consume(IDENTIFIER_TK, "Expected class name.");
+    Token className = parser.previous;
+    uint8_t nameConstant = identifierConstant(&parser.previous);
+    declareVariable();
+
+    emitBytes(OP_CLASS, nameConstant);
+    defineVariable(nameConstant);
+
+    ClassCompiler classCompiler;
+    classCompiler.hasSuperclass = false;
+    classCompiler.enclosing = currentClass;
+    currentClass = &classCompiler;
+
+    if (match(LT_TK)) {
+        consume(IDENTIFIER_TK, "Expected superclass name.");
+        variable(false);
+
+        if (identifiersEqual(&className, &parser.previous)) {
+            error("A class cannot inherit from itself.");
+        }
+
+        beginScope();
+        addLocal(syntheticToken("super"));
+        defineVariable(0);
+
+        namedVariable(className, false);
+        emitByte(OP_INHERIT);
+        classCompiler.hasSuperclass = true;
+    }
+
+    namedVariable(className, false);
+    consume(LBRACE_TK, "Expected '{' before class body.");
+    while (!check(RBRACE_TK) && !check(EOF_TK)) {
+        method();
+    }
+    consume(RBRACE_TK, "Expected '}' after class body.");
+
+    emitByte(OP_POP);
+
+    if (classCompiler.hasSuperclass) {
+        endScope();
+    }
+
+    currentClass = currentClass->enclosing;
+}
+
+static void
 ifStatement()
 {
     consume(LPAREN_TK, "Expected '(' after 'if'.");
@@ -783,6 +925,10 @@ returnStatement()
     if (match(SEMICOLON_TK)) {
         emitReturn();
     } else {
+        if (current->type == TYPE_INITIALIZER) {
+            error("Cannot return a value from a class initializer.");
+        }
+
         expression();
         consume(SEMICOLON_TK, "Expected ';' after return value.");
         emitByte(OP_RETURN);
@@ -849,7 +995,8 @@ synchronize()
 static void
 declaration()
 {
-    if (match(FUN_TK)) funDeclaration();
+    if (match(CLASS_TK)) classDeclaration();
+    else if (match(FUN_TK)) funDeclaration();
     else if (match(VAR_TK)) varDeclaration();
     else statement();
 
@@ -897,4 +1044,14 @@ compile(const char *source)
 
     ObjFunction *function = endCompiler();
     return parser.hadError ? NULL : function;
+}
+
+void
+markCompilerRoots()
+{
+    Compiler *compiler = current;
+    while (compiler != NULL) {
+        markObject((Obj *)compiler->function);
+        compiler = compiler->enclosing;
+    }
 }

@@ -1,0 +1,10 @@
+class Person {}
+
+var person = Person();
+person.name = "Chandler";
+person.age = 27;
+person.height = 69;
+
+print person.name;
+print person.age;
+print person.height;

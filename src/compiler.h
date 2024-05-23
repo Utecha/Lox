@@ -47,6 +47,8 @@ typedef struct {
 
 typedef enum {
     TYPE_FUNCTION,
+    TYPE_INITIALIZER,
+    TYPE_METHOD,
     TYPE_SCRIPT
 } FunctionType;
 
@@ -62,7 +64,15 @@ typedef struct Compiler {
     int scopeDepth;
 } Compiler;
 
+typedef struct ClassCompiler {
+    struct ClassCompiler *enclosing;
+    bool hasSuperclass;
+} ClassCompiler;
+
 ObjFunction *
 compile(const char *source);
+
+void
+markCompilerRoots();
 
 #endif // CLOX_COMPILER_H

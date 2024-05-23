@@ -1,11 +1,5 @@
-chapter_18/
-chapter_19/
-chapter_20/
-chapter_21/
-chapter_22/
-chapter_23/
-chapter_24/
-chapter_25/
+per_chapter/
 bin/
 src/obj
 clox
+gmon.out

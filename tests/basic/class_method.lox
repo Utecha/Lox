@@ -1,0 +1,16 @@
+class Animal {
+    init(kind, pattern, size) {
+        this.kind = kind;
+        this.pattern = pattern;
+        this.size = size;
+    }
+
+    info() {
+        print this.kind;
+        print this.pattern;
+        print this.size;
+    }
+}
+
+var animal = Animal("Cat", "Black with white spots", "Small");
+animal.info();

@@ -1,0 +1,29 @@
+fun
+preIncrement(variable)
+{
+    variable = variable + 1;
+
+    return variable;
+}
+
+fun
+postIncrement(variable)
+{
+    var captured = variable;
+
+    variable = variable + 1;
+
+    return captured;
+}
+
+fun
+main()
+{
+    var a = 0;
+    print a;
+    print preIncrement(a);
+    print a;
+    print postIncrement(a);
+}
+
+main();
