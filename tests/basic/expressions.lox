@@ -1,1 +1,16 @@
-(34 + 35) * (500 - 80) / 2
+/*
+ * If all is well, this file should just run and exit with code 0.
+*/
+
+34 + 35;
+500 - 80;
+23 * 3;
+28980 / (34 + 35);
+true == false;
+false != nil;
+69 < 420;
+420 <= 69;
+69 > 420;
+420 >= 69;
+"Hello" + " World!";
+"I am " + 1000000 + " years old";

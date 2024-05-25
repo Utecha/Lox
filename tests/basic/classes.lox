@@ -1,10 +1,26 @@
-class Person {}
+class Person
+{
+    init(name, age)
+    {
+        this.name = name;
+        this.age = age;
+    }
 
-var person = Person();
-person.name = "Chandler";
-person.age = 27;
-person.height = 69;
+    info()
+    {
+        print "Name: " + this.name;
+        print "Age: " + this.age;
+    }
 
-print person.name;
-print person.age;
+    greeting()
+    {
+        print "Hello, my name is " + this.name + " and I am " + this.age + " years old.";
+    }
+}
+
+var person = Person("Hannah", 31);
+person.height = 54;
+
+person.info();
 print person.height;
+person.greeting();
