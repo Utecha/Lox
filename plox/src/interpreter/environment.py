@@ -23,7 +23,7 @@ class Environment:
         raise LoxRuntimeError(name, f"Undefined Variable '{name.lexeme}'.")
 
     def get_at(self, distance: int, name: str):
-        return self.ancestor(distance).values[name]
+        return self.ancestor(distance).values.get(name)
 
     def assign(self, name: Token, value: object):
         if name.lexeme in self.values.keys():

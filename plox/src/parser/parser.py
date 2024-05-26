@@ -7,15 +7,20 @@ from src.ast.expr import (
     Binary,
     Call,
     Conditional,
+    Get,
     Grouping,
     Literal,
     Logical,
+    Self,
+    Set,
+    Super,
     Unary,
     Variable
 )
 from src.ast.stmt import (
     Block,
     Break,
+    Class,
     Const,
     Continue,
     Echo,
@@ -57,6 +62,9 @@ class Parser:
             print("DECLARATION", file=sys.stderr)
 
         try:
+            if self.match(TokenType.CLASS):
+                return self.class_declaration()
+
             if self.match(TokenType.CONST):
                 return self.const_declaration()
 
@@ -70,6 +78,23 @@ class Parser:
         except ParseError as e:
             self.synchronize()
             return
+
+    def class_declaration(self):
+        name = self.consume(TokenType.IDENTIFIER, "Expected class name.")
+
+        superclass = None
+        if self.match(TokenType.LT, TokenType.COLON):
+            self.consume(TokenType.IDENTIFIER, "Expected superclass name.")
+            superclass = Variable(self.previous())
+
+        self.consume(TokenType.LBRACE, "Expected '{' before class body.")
+
+        methods = []
+        while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            methods.append(self.function("method"))
+
+        self.consume(TokenType.RBRACE, "Expected '}' after class body.")
+        return Class(name, superclass, methods)
 
     def statement(self):
         if self.debug:
@@ -330,6 +355,9 @@ class Parser:
             if isinstance(expr, Variable):
                 name = expr.name
                 return Assign(name, operator, value)
+            elif isinstance(expr, Get):
+                get = expr;
+                return Set(get.obj, get.name, value)
 
             self.error(operator, "Invalid assignment target.")
 
@@ -480,6 +508,14 @@ class Parser:
         while True:
             if self.match(TokenType.LPAREN):
                 expr = self.finish_call(expr)
+            elif self.match(TokenType.DOT):
+                name = self.consume(
+                    TokenType.IDENTIFIER,
+                    "Expected property name after '.'."
+                )
+                expr = Get(expr, name)
+            elif self.match(TokenType.LBRACK):
+                pass
             else:
                 break
 
@@ -500,6 +536,15 @@ class Parser:
 
         if self.match(TokenType.NUMBER, TokenType.STRING):
             return Literal(self.previous().literal)
+
+        if self.match(TokenType.SUPER):
+            keyword = self.previous()
+            self.consume(TokenType.DOT, "Expected '.' after 'super'.")
+            method = self.consume(TokenType.IDENTIFIER, "Expected superclass method name.")
+            return Super(keyword, method)
+
+        if self.match(TokenType.THIS, TokenType.SELF):
+            return Self(self.previous())
 
         if self.match(TokenType.IDENTIFIER):
             return Variable(self.previous())

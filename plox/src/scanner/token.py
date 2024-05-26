@@ -7,6 +7,8 @@ class TokenType(Enum):
     RPAREN = auto()
     LBRACE = auto()
     RBRACE = auto()
+    LBRACK = auto()
+    RBRACK = auto()
     COMMA = auto()
     DOT = auto()
     QUESTION = auto()

@@ -9,9 +9,13 @@ from src.ast.expr import (
     Binary,
     Call,
     Conditional,
+    Get,
     Grouping,
     Literal,
     Logical,
+    Self,
+    Set,
+    Super,
     Unary,
     Variable
 )
@@ -20,6 +24,7 @@ from src.ast.stmt import (
     StmtVisitor,
     Block,
     Break,
+    Class,
     Const,
     Continue,
     Echo,
@@ -33,15 +38,24 @@ from src.ast.stmt import (
 )
 
 
+class ClassType(Enum):
+    NONE = 0
+    CLASS = 1
+    SUBCLASS = 2
+
+
 class FunctionType(Enum):
     NONE = 0
     FUNCTION = 1
+    INITIALIZER = 2
+    METHOD = 3
 
 
 class Resolver(ExprVisitor, StmtVisitor):
     def __init__(self, interpreter, err_manager):
         self.interpreter = interpreter
         self.err_manager = err_manager
+        self.current_class = ClassType.NONE
         self.current_func = FunctionType.NONE
         self.scopes = []
 
@@ -107,6 +121,46 @@ class Resolver(ExprVisitor, StmtVisitor):
     def visit_break_stmt(self, stmt: Break):
         pass
 
+    def visit_class_stmt(self, stmt: Class):
+        enclosing_class = self.current_class
+        self.current_class = ClassType.CLASS
+
+        self.declare(stmt.name)
+        self.define(stmt.name)
+
+        if stmt.superclass != None:
+            if stmt.name.lexeme == stmt.superclass.name.lexeme:
+                self.err_manager.parse_error(
+                    stmt.superclass.name,
+                    "A class cannot inherit from itself."
+                )
+
+            self.resolve_stmt(stmt.superclass)
+
+            self.begin_scope()
+            self.scopes[-1] |= {"super": True}
+
+        self.begin_scope()
+        self.scopes[-1] |= {"this": True}
+        self.scopes[-1] |= {"self": True}
+
+        for method in stmt.methods:
+            declaration = FunctionType.METHOD
+
+            if method.name.lexeme == "init" or  \
+                method.name.lexeme == stmt.name:
+
+                declaration = FunctionType.INITIALIZER
+
+            self.resolve_function(method, declaration)
+
+        self.end_scope()
+
+        if stmt.superclass != None:
+            self.end_scope()
+
+        self.current_class = enclosing_class
+
     def visit_const_stmt(self, stmt: Const):
         self.declare(stmt.name)
         self.resolve_expr(stmt.initializer)
@@ -153,6 +207,12 @@ class Resolver(ExprVisitor, StmtVisitor):
             )
 
         if stmt.value != None:
+            if self.current_func == FunctionType.INITIALIZER:
+                self.err_manager.parse_error(
+                    stmt.keyword,
+                    "Cannot return a value from an initializer."
+                )
+
             self.resolve_expr(stmt.value)
 
     def visit_var_stmt(self, stmt: Var):
@@ -184,6 +244,9 @@ class Resolver(ExprVisitor, StmtVisitor):
         self.resolve_expr(stmt.then_branch)
         self.resolve_expr(stmt.else_branch)
 
+    def visit_get_expr(self, expr: Get):
+        self.resolve_expr(expr.obj)
+
     def visit_grouping_expr(self, expr: Grouping):
         self.resolve_expr(expr.expression)
 
@@ -193,6 +256,33 @@ class Resolver(ExprVisitor, StmtVisitor):
     def visit_logical_expr(self, expr: Logical):
         self.resolve_expr(expr.left)
         self.resolve_expr(expr.right)
+
+    def visit_self_expr(self, expr: Self):
+        if self.current_class == ClassType.NONE:
+            self.err_manager.parse_error(
+                expr.keyword,
+                "Cannot use 'self' (or 'this') outside of a class."
+            )
+
+        self.resolve_local(expr, expr.keyword)
+
+    def visit_set_expr(self, expr: Set):
+        self.resolve_expr(expr.value)
+        self.resolve_expr(expr.obj)
+
+    def visit_super_expr(self, expr: Super):
+        if self.current_class == ClassType.NONE:
+            self.err_manager.parse_error(
+                expr.keyword,
+                "Cannot use 'super' outside of a class."
+            )
+        elif self.current_class != ClassType.SUBCLASS:
+            self.err_manager.parse_error(
+                expr.keyword,
+                "Cannot use 'super' in a class with no superclass."
+            )
+
+        self.resolve_local(expr, expr.keyword)
 
     def visit_unary_expr(self, expr: Unary):
         self.resolve_expr(expr.right)

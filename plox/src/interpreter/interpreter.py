@@ -6,9 +6,13 @@ from src.ast.expr import (
     Binary,
     Call,
     Conditional,
+    Get,
     Grouping,
     Literal,
     Logical,
+    Self,
+    Set,
+    Super,
     Unary,
     Variable
 )
@@ -17,6 +21,7 @@ from src.ast.stmt import (
     StmtVisitor,
     Block,
     Break,
+    Class,
     Const,
     Continue,
     Echo,
@@ -29,7 +34,9 @@ from src.ast.stmt import (
     While
 )
 from src.callable.lox_callable import LoxCallable
+from src.callable.lox_class import LoxClass
 from src.callable.lox_function import LoxFunction
+from src.callable.lox_instance import LoxInstance
 from src.interpreter.environment import Environment
 from src.callable.natives import define_natives
 from src.scanner.token import TokenType
@@ -101,6 +108,40 @@ class Interpreter(ExprVisitor, StmtVisitor):
     def visit_break_stmt(self, stmt: Break):
         raise BreakException(stmt.keyword)
 
+    def visit_class_stmt(self, stmt: Class):
+        superclass = None
+        if stmt.superclass != None:
+            superclass = self.evaluate(stmt.superclass)
+
+            if not isinstance(superclass, LoxClass):
+                raise LoxRuntimeError(
+                    stmt.superclass.name,
+                    "Superclass must be a class."
+                )
+
+        self.environment.define(stmt.name.lexeme, None)
+
+        if stmt.superclass != None:
+            self.environment = Environment(self.environment)
+            self.environment.define("super", superclass)
+
+        methods = {}
+        for method in stmt.methods:
+            function = LoxFunction(
+                method,
+                self.environment,
+                (method.name.lexeme == "init" or
+                    method.name.lexeme == stmt.name.lexeme)
+            )
+            methods[method.name.lexeme] = function
+
+        klass = LoxClass(stmt.name.lexeme, superclass, methods)
+
+        if superclass != None:
+            self.environment = self.environment.enclosing
+
+        self.environment.assign(stmt.name, klass)
+
     def visit_const_stmt(self, stmt: Const):
         value = self.evaluate(stmt.initializer)
         self.environment.define_const(stmt.name.lexeme, value)
@@ -136,8 +177,8 @@ class Interpreter(ExprVisitor, StmtVisitor):
             self.loop_depth -= 1
 
     def visit_function_stmt(self, stmt: Function):
-        function = LoxFunction(stmt, self.environment)
-        self.environment.define_const(stmt.name.lexeme, function)
+        function = LoxFunction(stmt, self.environment, False)
+        self.environment.define(stmt.name.lexeme, function)
 
     def visit_if_stmt(self, stmt: If):
         if self.is_truthy(self.evaluate(stmt.condition)):
@@ -353,6 +394,16 @@ class Interpreter(ExprVisitor, StmtVisitor):
 
         return self.evaluate(expr.else_branch)
 
+    def visit_get_expr(self, expr: Get):
+        obj = self.evaluate(expr.obj)
+        if isinstance(obj, LoxInstance):
+            return obj.get(expr.name)
+
+        raise LoxRuntimeError(
+            expr.name,
+            "Only instances of an object have properties."
+        )
+
     def visit_grouping_expr(self, expr: Grouping):
         return self.evaluate(expr.expression)
 
@@ -370,6 +421,40 @@ class Interpreter(ExprVisitor, StmtVisitor):
                 return left
 
         return self.evaluate(expr.right)
+
+    def visit_self_expr(self, expr: Self):
+        return self.look_up_variable(expr.keyword, expr)
+
+    def visit_set_expr(self, expr: Set):
+        obj = self.evaluate(expr.obj)
+
+        if not isinstance(obj, LoxInstance):
+            raise LoxRuntimeError(
+                expr.name,
+                "Only instances of an object have fields."
+            )
+
+        value = self.evaluate(expr.value)
+        obj.set_(expr.name, value)
+        return value
+
+    def visit_super_expr(self, expr: Super):
+        distance = self.locals.get(expr)
+        superclass = self.environment.get_at(distance, "super")
+
+        obj = self.environment.get_at(distance - 1, "self")
+        if obj == None:
+            obj = self.environment.get_at(distance - 1, "this")
+
+        method = superclass.find_method(expr.method.lexeme)
+
+        if method == None:
+            raise LoxRuntimeError(
+                expr.method,
+                f"Undefined Property '{expr.method.lexeme}'."
+            )
+
+        return method.bind(obj)
 
     def visit_unary_expr(self, expr: Unary):
         right = self.evaluate(expr.right)
