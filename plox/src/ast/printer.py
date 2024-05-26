@@ -9,9 +9,13 @@ from src.ast.expr import (
     Binary,
     Call,
     Conditional,
+    Get,
     Grouping,
     Literal,
     Logical,
+    Self,
+    Set,
+    Super,
     Unary,
     Variable
 )
@@ -20,6 +24,7 @@ from src.ast.stmt import (
     StmtVisitor,
     Block,
     Break,
+    Class,
     Const,
     Continue,
     Echo,
@@ -37,6 +42,9 @@ class AstPrinter(ExprVisitor, StmtVisitor):
         return self.build_stmt_tree(stmt)
 
     def visit_break_stmt(self, stmt: Break):
+        return self.build_stmt_tree(stmt)
+
+    def visit_class_stmt(self, stmt: Class):
         return self.build_stmt_tree(stmt)
 
     def visit_const_stmt(self, stmt: Const):
@@ -81,6 +89,9 @@ class AstPrinter(ExprVisitor, StmtVisitor):
     def visit_conditional_expr(self, expr: Conditional):
         return self.build_expr_tree(expr)
 
+    def visit_get_expr(self, expr: Get):
+        return self.build_expr_tree(expr)
+
     def visit_grouping_expr(self, expr: Grouping):
         return self.build_expr_tree(expr)
 
@@ -88,6 +99,15 @@ class AstPrinter(ExprVisitor, StmtVisitor):
         return self.build_expr_tree(expr)
 
     def visit_logical_expr(self, expr: Logical):
+        return self.build_expr_tree(expr)
+
+    def visit_self_expr(self, expr: Self):
+        return self.build_expr_tree(expr)
+
+    def visit_set_expr(self, expr: Set):
+        return self.build_expr_tree(expr)
+
+    def visit_super_expr(self, expr: Super):
         return self.build_expr_tree(expr)
 
     def visit_unary_expr(self, expr: Unary):
@@ -110,6 +130,19 @@ class AstPrinter(ExprVisitor, StmtVisitor):
 
         if isinstance(stmt, Block):
             return self.build_block(stmt.statements)
+
+        elif isinstance(stmt, Class):
+            result += f" define class {stmt.name.lexeme} "
+
+            if stmt.superclass is not None:
+                result += f" inherits from {stmt.superclass}"
+
+            if stmt.methods:
+                for method in stmt.methods:
+                    if isinstance(method, Function):
+                        result += f" {method.accept(self)} "
+                    else:
+                        result += f" {method.lexeme} "
 
         elif isinstance(stmt, Const):
             result += f" = const define {stmt.name.lexeme}"
@@ -136,16 +169,28 @@ class AstPrinter(ExprVisitor, StmtVisitor):
                 result += f" {stmt.body.accept(self)} "
 
         elif isinstance(stmt, Function):
-            pass
+            result += f" define function {stmt.name.lexeme} "
+
+            result += "("
+            for param in stmt.params:
+                if param == stmt.params[len(stmt.params) - 1]:
+                    result += f"{param.lexeme}"
+                else:
+                    result += f"{param.lexeme}, "
+            result += ") "
+
+            for statement in stmt.body:
+                print(type(statement))
+                result += f" {statement.accept(self)} "
 
         elif isinstance(stmt, If):
-            result += f" if {stmt.condition.accept(self)} is True,"
+            result += f" if {stmt.condition.accept(self)} is true,"
 
             if stmt.else_branch != None:
-                result += f" then do {stmt.then_branch.accept(self)}"
-                result += f" else do {stmt.else_branch.accept(self)} "
+                result += f" then {stmt.then_branch.accept(self)}"
+                result += f" else {stmt.else_branch.accept(self)} "
             else:
-                result += f" then do {stmt.then_branch.accept(self)} "
+                result += f" then {stmt.then_branch.accept(self)} "
 
         elif isinstance(stmt, Return):
             result += f" return {stmt.value.accept(self)} "
@@ -154,11 +199,16 @@ class AstPrinter(ExprVisitor, StmtVisitor):
             if stmt.initializer == None:
                 result += f" var declare {stmt.name.lexeme} "
             else:
-                result += f" = {stmt.keyword.lexeme} define {stmt.name.lexeme}"
+                result += f" = {stmt.keyword.lexeme} define ({stmt.name.lexeme})"
                 result += f" {stmt.initializer.accept(self)} "
 
         elif isinstance(stmt, While):
-            pass
+            result += " do "
+
+            if isinstance(stmt.body, Block):
+                result += self.build_block(stmt.body.statements)
+
+            result += f" while {stmt.condition.accept(self)} is true "
 
         result += "]"
         return result
@@ -197,8 +247,11 @@ class AstPrinter(ExprVisitor, StmtVisitor):
             result += f" ? {expr.then_branch.accept(self)}"
             result += f" : {expr.else_branch.accept(self)} "
 
+        elif isinstance(expr, Get):
+            result += f" get {expr.name.lexeme} from {expr.obj.accept(self)} "
+
         elif isinstance(expr, Grouping):
-            return f" Group ( {expr.expression.accept(self)} ) "
+            return f" group ( {expr.expression.accept(self)} ) "
 
         elif isinstance(expr, Literal):
             if expr.value == None:
@@ -210,6 +263,16 @@ class AstPrinter(ExprVisitor, StmtVisitor):
             result += f" {expr.operator.lexeme}"
             result += f" {expr.left.accept(self)}"
             result += f" {expr.right.accept(self)} "
+
+        elif isinstance(expr, Self):
+            result += "self"
+
+        elif isinstance(expr, Set):
+            result += f" set {expr.obj.accept(self)}.{expr.name.lexeme}"
+            result += f" = {expr.value.accept(self)} "
+
+        elif isinstance(expr, Super):
+            result += f" get super method : {expr.method.lexeme} "
 
         elif isinstance(expr, Unary):
             result += f" {expr.operator.lexeme}"

@@ -39,10 +39,10 @@ class Lox:
 
     def repl(self):
         if self.debug:
-            print("Lox REPL Version 0.0.1 [DEBUG MODE]")
+            print("plox REPL Version 0.0.1 [DEBUG MODE]")
             print("Lang Version 0.0.5")
         else:
-            print("Lox REPL Version 0.0.1")
+            print("plox REPL Version 0.0.1")
             print("Lang Version 0.0.5")
         print("Press Ctrl-D to quit.")
 

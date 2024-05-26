@@ -186,7 +186,7 @@ class Scanner:
             case _:
                 if c.isdigit():
                     self.number()
-                elif c.isalpha():
+                elif c.isalpha() or c == '_':
                     self.identifier()
                 else:
                     self.err_manager.scan_error(
@@ -197,7 +197,7 @@ class Scanner:
                 return
 
     def identifier(self):
-        while self.peek().isalnum():
+        while self.peek().isalnum() or self.peek() == '_':
             self.advance()
 
         text = self.source[self.start: self.current]
